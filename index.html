@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Daily Steno Practice Generator</title>
+  <style>
+    :root {
+      --bg: #121214;
+      --card-bg: #1e1e24;
+      --accent: #7952b3;
+      --text: #e1e1e6;
+      --text-muted: #a0a0b0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    h1 { margin-bottom: 0.25rem; color: #fff; }
+    .date-sub { color: var(--text-muted); font-size: 1rem; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      border-bottom: 1px solid #333;
+      padding-bottom: 0.5rem;
+      color: var(--accent);
+    }
+
+    .video-container {
+      position: relative;
+      padding-bottom: 56.25%; /* 16:9 aspect ratio */
+      height: 0;
+      overflow: hidden;
+      border-radius: 6px;
+    }
+
+    .video-container iframe {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border: 0;
+    }
+
+    .word-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .word-item {
+      background: #2a2a32;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      text-align: center;
+      font-family: monospace;
+      font-size: 1.1rem;
+    }
+
+    .tips-list {
+      padding-left: 1.2rem;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Stenography Daily Practice</h1>
+    <div class="date-sub" id="current-date">Loading date...</div>
+  </header>
+
+  <!-- Video Section -->
+  <div class="card">
+    <h2>1. Daily Dictation Video</h2>
+    <div class="video-container">
+      <iframe id="youtube-player" src="" allowfullscreen></iframe>
+    </div>
+  </div>
+
+  <!-- Word Practice Section -->
+  <div class="card">
+    <h2>2. Focus Words & Briefs</h2>
+    <p>Practice writing these target outlines on your steno machine or Plover setup today:</p>
+    <div class="word-grid" id="word-list"></div>
+  </div>
+
+  <!-- Practice Routine Tip -->
+  <div class="card">
+    <h2>3. Suggested Practice Routine</h2>
+    <ul class="tips-list">
+      <li><strong>Warm-up (5 mins):</strong> Slow repetition on the focus words above. Focus on clean stroke execution without misstrokes.</li>
+      <li><strong>Pass 1 (Dictation):</strong> Play the YouTube dictation straight through. Do not stop the video if you fall behind; drop the missed words and resume.</li>
+      <li><strong>Pass 2 (Speed Building):</strong> Adjust video playback speed to 1.25x or 1.5x on YouTube. Practice carrying speed through difficult passages.</li>
+      <li><strong>Review:</strong> Read back your transcript against the video audio and check for hesitations or unknown briefs.</li>
+    </ul>
+  </div>
+
+  <script>
+    // 1. Curated List of Practice Datasets
+    const practicePool = [
+      {
+        videoId: "FvPUdZLJg_c", // Example Youtube Video ID
+        words: ["TH-", "-P", "TK-", "PW-", "STK-", "T-", "KWR-", "H-"]
+      },
+      {
+        videoId: "VhrXcjte1v8",
+        words: ["S-", "T-", "K-", "P-", "W-", "H-", "R-", "A-"]
+      },
+      {
+        videoId: "L_LUpnjgPso",
+        words: ["about", "before", "can", "could", "different", "every", "from", "great"]
+      },
+      {
+        videoId: "3JZ_D3ELwOQ",
+        words: ["TP-", "KWR-", "SKWR-", "SR-", "TKPW-", "KWH-", "SWR-", "KP-"]
+      }
+    ];
+
+    // 2. Deterministic Daily Selection Logic
+    function getDailyPractice() {
+      const today = new Date();
+      
+      // Display human-readable date
+      const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      document.getElementById("current-date").textContent = today.toLocaleDateString(undefined, dateOptions);
+
+      // Use Year, Month, and Day to create a consistent daily index
+      const dayOfYear = Math.floor(
+        (today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24)
+      );
+      
+      // Select index based on the day
+      const selectedIndex = dayOfYear % practicePool.length;
+      return practicePool[selectedIndex];
+    }
+
+    // 3. Render Content onto the Page
+    function init() {
+      const dailyData = getDailyPractice();
+
+      // Embed YouTube video
+      const player = document.getElementById("youtube-player");
+      player.src = `https://www.youtube.com/embed/${dailyData.videoId}`;
+
+      // Populate focus words
+      const wordContainer = document.getElementById("word-list");
+      wordContainer.innerHTML = "";
+      dailyData.words.forEach(word => {
+        const item = document.createElement("div");
+        item.className = "word-item";
+        item.textContent = word;
+        wordContainer.appendChild(item);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
