@@ -44,6 +44,9 @@
       border-bottom: 1px solid #333;
       padding-bottom: 0.5rem;
       color: var(--accent);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .video-container {
@@ -61,30 +64,52 @@
       border: 0;
     }
 
-    .word-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      gap: 0.75rem;
+    /* Steno Practice Table Styling */
+    .table-container {
+      overflow-x: auto;
       margin-top: 1rem;
     }
 
-    .word-item {
-      background: #2a2a32;
-      padding: 0.5rem 0.75rem;
-      border-radius: 4px;
-      text-align: center;
+    table {
+      width: 100%;
+      border-collapse: collapse;
       font-family: monospace;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
+    }
+
+    th, td {
+      border: 1px solid #333;
+      padding: 0.6rem 1rem;
+      text-align: left;
+    }
+
+    th {
+      background-color: #2a2a32;
+      color: var(--accent);
+    }
+
+    tr:nth-child(even) {
+      background-color: #18181c;
+    }
+
+    .copy-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+
+    .copy-btn:hover {
+      opacity: 0.9;
     }
 
     .tips-list {
       padding-left: 1.2rem;
       line-height: 1.6;
-    }
-
-    .status-msg {
-      color: var(--text-muted);
-      font-style: italic;
     }
   </style>
 </head>
@@ -105,9 +130,25 @@
 
   <!-- Word Practice Section -->
   <div class="card">
-    <h2>2. Focus Words & Briefs</h2>
-    <p>Practice writing these target outlines on your steno machine or Plover setup today:</p>
-    <div class="word-grid" id="word-list"></div>
+    <h2>
+      2. Daily Hesitation Drills
+      <button class="copy-btn" onclick="copyTableToClipboard()">Copy Table for Typey Type</button>
+    </h2>
+    <p>A daily selection from your Google Sheet hesitation list. Click the button above to copy both columns directly into Typey Type:</p>
+    
+    <div class="table-container">
+      <table id="steno-table">
+        <thead>
+          <tr>
+            <th>Word / Phrase</th>
+            <th>Steno Outline</th>
+          </tr>
+        </thead>
+        <tbody id="steno-table-body">
+          <tr><td colspan="2">Loading word drills from Google Sheets...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Practice Routine Tip -->
@@ -123,18 +164,16 @@
 
   <script>
     // ==========================================
-    // CONFIGURATION: ADD YOUR API KEY & PLAYLIST ID HERE
+    // CONFIGURATION
     // ==========================================
     const API_KEY = "AIzaSyCZoiT-fezR1XpfA0UsAHLLUAwRWe1cs_I";
     const PLAYLIST_ID = "PL85Y9t9lANyCkyIl6hCg1gkbG3pUPyFax";
+    
+    // Paste your published Google Sheet CSV URL here:
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQVVfcwBmYpQuWsbAMeHXpZsMxotpmr6DeFVNsn1eByPqKciJ4_zgM-ER00r_M0GrInssVZAxwXNbSC/pub?gid=0&single=true&output=csv";
 
-    // Standard word drill arrays mapped to days
-    const fallbackWordSets = [
-      ["TH-", "-P", "TK-", "PW-", "STK-", "T-", "KWR-", "H-"],
-      ["S-", "T-", "K-", "P-", "W-", "H-", "R-", "A-"],
-      ["about", "before", "can", "could", "different", "every", "from", "great"],
-      ["TP-", "KWR-", "SKWR-", "SR-", "TKPW-", "KWH-", "SWR-", "KP-"]
-    ];
+    // How many words from your sheet to test on each day
+    const DAILY_WORD_COUNT = 15;
 
     function calculateDayOfYear(today) {
       const startOfYear = Date.UTC(today.getFullYear(), 0, 0);
@@ -142,63 +181,124 @@
       return Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
     }
 
+    // 1. YouTube Fetch
     async function fetchPlaylistVideos() {
+      if (!API_KEY || API_KEY.includes("YOUR_YOUTUBE")) return [];
       const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${PLAYLIST_ID}&key=${API_KEY}`;
-      
       try {
         const response = await fetch(url);
         const data = await response.json();
-
-        if (data.error) {
-          console.error("YouTube API Error:", data.error.message);
-          return [];
-        }
-
+        if (data.error) return [];
         return data.items.map(item => ({
           videoId: item.snippet.resourceId.videoId,
           title: item.snippet.title
         }));
       } catch (err) {
-        console.error("Failed to fetch playlist:", err);
         return [];
       }
     }
 
+    // 2. Google Sheets CSV Fetch & Parse
+    async function fetchSheetWords() {
+      if (!CSV_URL || CSV_URL.includes("YOUR_PUBLISHED")) return [];
+      try {
+        const response = await fetch(CSV_URL);
+        const text = await response.text();
+        
+        // Split rows and parse columns
+        const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
+        const wordPairs = [];
+
+        lines.forEach((line, index) => {
+          // Skip header row if present
+          if (index === 0 && (line.toLowerCase().includes("word") || line.toLowerCase().includes("outline"))) return;
+
+          const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); // Simple CSV regex split
+          if (parts.length >= 2) {
+            const word = parts[0].replace(/^"|"$/g, '').trim();
+            const stroke = parts[1].replace(/^"|"$/g, '').trim();
+            if (word && stroke) {
+              wordPairs.push({ word, stroke });
+            }
+          }
+        });
+
+        return wordPairs;
+      } catch (err) {
+        console.error("Failed to fetch Google Sheet CSV:", err);
+        return [];
+      }
+    }
+
+    // Seeded pseudo-random shuffle based on day of year
+    function getDailySelection(items, dayOfYear, count) {
+      if (items.length <= count) return items;
+
+      // Deterministic shuffle using day of year as seed
+      const shuffled = [...items];
+      let seed = dayOfYear;
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        seed = (seed * 9301 + 49297) % 233280;
+        const j = Math.floor((seed / 233280) * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      return shuffled.slice(0, count);
+    }
+
+    // 3. Copy Helper for Typey Type
+    function copyTableToClipboard() {
+      const rows = document.querySelectorAll("#steno-table-body tr");
+      const textLines = [];
+      
+      rows.forEach(row => {
+        const cells = row.querySelectorAll("td");
+        if (cells.length >= 2) {
+          textLines.push(`${cells[0].textContent}\t${cells[1].textContent}`);
+        }
+      });
+
+      const copyText = textLines.join("\n");
+      navigator.clipboard.writeText(copyText).then(() => {
+        alert("Table copied to clipboard! Ready to paste into Typey Type.");
+      }).catch(err => {
+        console.error("Copy failed:", err);
+      });
+    }
+
+    // 4. Main Initialization
     async function init() {
       const today = new Date();
-      
-      // Display human-readable date
       const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
       document.getElementById("current-date").textContent = today.toLocaleDateString(undefined, dateOptions);
 
       const dayOfYear = calculateDayOfYear(today);
 
-      // Fetch YouTube Videos from Playlist
+      // Render Video
       const videos = await fetchPlaylistVideos();
-
       if (videos.length > 0) {
-        // Pick video based on day of year
         const videoIndex = dayOfYear % videos.length;
         const dailyVideo = videos[videoIndex];
-
         document.getElementById("youtube-player").src = `https://www.youtube.com/embed/${dailyVideo.videoId}`;
         document.getElementById("video-title").textContent = `1. Daily Dictation: ${dailyVideo.title}`;
-      } else {
-        document.getElementById("video-title").textContent = "1. Daily Dictation (Configure API Key & Playlist ID)";
       }
 
-      // Populate word drills
-      const wordIndex = dayOfYear % fallbackWordSets.length;
-      const currentWords = fallbackWordSets[wordIndex];
-      const wordContainer = document.getElementById("word-list");
-      wordContainer.innerHTML = "";
-      
-      currentWords.forEach(word => {
-        const item = document.createElement("div");
-        item.className = "word-item";
-        item.textContent = word;
-        wordContainer.appendChild(item);
-      });
+      // Render Google Sheet Table
+      const allWords = await fetchSheetWords();
+      const tbody = document.getElementById("steno-table-body");
+      tbody.innerHTML = "";
+
+      if (allWords.length > 0) {
+        const dailyWords = getDailySelection(allWords, dayOfYear, DAILY_WORD_COUNT);
+        
+        dailyWords.forEach(item => {
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${item.word}</td><td>${item.stroke}</td>`;
+          tbody.appendChild(row);
+        });
+      } else {
+        tbody.innerHTML = `<tr><td colspan="2">No words loaded. Make sure CSV_URL is set in index.html and published to web.</td></tr>`;
+      }
     }
 
     if (document.readyState === "loading") {
