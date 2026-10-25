@@ -81,6 +81,11 @@
       padding-left: 1.2rem;
       line-height: 1.6;
     }
+
+    .status-msg {
+      color: var(--text-muted);
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -92,9 +97,9 @@
 
   <!-- Video Section -->
   <div class="card">
-    <h2>1. Daily Dictation Video</h2>
+    <h2 id="video-title">1. Daily Dictation Video</h2>
     <div class="video-container">
-      <iframe id="youtube-player" src="" allowfullscreen></iframe>
+      <iframe id="youtube-player" src="" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
     </div>
   </div>
 
@@ -117,56 +122,78 @@
   </div>
 
   <script>
-    // 1. Curated List of Practice Datasets
-    const practicePool = [
-      {
-        videoId: "FvPUdZLJg_c", // Example Youtube Video ID
-        words: ["TH-", "-P", "TK-", "PW-", "STK-", "T-", "KWR-", "H-"]
-      },
-      {
-        videoId: "VhrXcjte1v8",
-        words: ["S-", "T-", "K-", "P-", "W-", "H-", "R-", "A-"]
-      },
-      {
-        videoId: "L_LUpnjgPso",
-        words: ["about", "before", "can", "could", "different", "every", "from", "great"]
-      },
-      {
-        videoId: "3JZ_D3ELwOQ",
-        words: ["TP-", "KWR-", "SKWR-", "SR-", "TKPW-", "KWH-", "SWR-", "KP-"]
-      }
+    // ==========================================
+    // CONFIGURATION: ADD YOUR API KEY & PLAYLIST ID HERE
+    // ==========================================
+    const API_KEY = "AIzaSyCZoiT-fezR1XpfA0UsAHLLUAwRWe1cs_I";
+    const PLAYLIST_ID = "PL85Y9t9lANyCkyIl6hCg1gkbG3pUPyFax&si=OvGdl4ABLiynD1Qv";
+
+    // Standard word drill arrays mapped to days
+    const fallbackWordSets = [
+      ["TH-", "-P", "TK-", "PW-", "STK-", "T-", "KWR-", "H-"],
+      ["S-", "T-", "K-", "P-", "W-", "H-", "R-", "A-"],
+      ["about", "before", "can", "could", "different", "every", "from", "great"],
+      ["TP-", "KWR-", "SKWR-", "SR-", "TKPW-", "KWH-", "SWR-", "KP-"]
     ];
 
-    // 2. Deterministic Daily Selection Logic
-    function getDailyPractice() {
+    function calculateDayOfYear(today) {
+      const startOfYear = Date.UTC(today.getFullYear(), 0, 0);
+      const now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+      return Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
+    }
+
+    async function fetchPlaylistVideos() {
+      const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${PLAYLIST_ID}&key=${API_KEY}`;
+      
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.error) {
+          console.error("YouTube API Error:", data.error.message);
+          return [];
+        }
+
+        return data.items.map(item => ({
+          videoId: item.snippet.resourceId.videoId,
+          title: item.snippet.title
+        }));
+      } catch (err) {
+        console.error("Failed to fetch playlist:", err);
+        return [];
+      }
+    }
+
+    async function init() {
       const today = new Date();
       
       // Display human-readable date
       const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
       document.getElementById("current-date").textContent = today.toLocaleDateString(undefined, dateOptions);
 
-      // Use Year, Month, and Day to create a consistent daily index
-      const dayOfYear = Math.floor(
-        (today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24)
-      );
-      
-      // Select index based on the day
-      const selectedIndex = dayOfYear % practicePool.length;
-      return practicePool[selectedIndex];
-    }
+      const dayOfYear = calculateDayOfYear(today);
 
-    // 3. Render Content onto the Page
-    function init() {
-      const dailyData = getDailyPractice();
+      // Fetch YouTube Videos from Playlist
+      const videos = await fetchPlaylistVideos();
 
-      // Embed YouTube video
-      const player = document.getElementById("youtube-player");
-      player.src = `https://www.youtube.com/embed/${dailyData.videoId}`;
+      if (videos.length > 0) {
+        // Pick video based on day of year
+        const videoIndex = dayOfYear % videos.length;
+        const dailyVideo = videos[videoIndex];
 
-      // Populate focus words
+        document.getElementById("youtube-player").src = `https://www.youtube.com/embed/${dailyVideo.videoId}`;
+        document.getElementById("video-title").textContent = `1. Daily Dictation: ${dailyVideo.title}`;
+      } else {
+        document.getElementById("video-title").textContent = "1. Daily Dictation (Configure API Key & Playlist ID)";
+      }
+
+      // Populate word drills
+      const wordIndex = dayOfYear % fallbackWordSets.length;
+      const currentWords = fallbackWordSets[wordIndex];
       const wordContainer = document.getElementById("word-list");
       wordContainer.innerHTML = "";
-      dailyData.words.forEach(word => {
+      
+      currentWords.forEach(word => {
         const item = document.createElement("div");
         item.className = "word-item";
         item.textContent = word;
@@ -174,7 +201,11 @@
       });
     }
 
-    init();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>
