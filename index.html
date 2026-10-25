@@ -119,6 +119,14 @@
       font-weight: bold;
       color: #00d2ff;
       border: 1px solid #3a3a45;
+      transition: all 0.2s ease;
+    }
+
+    .writeout-item.speaking {
+      border-color: #00d2ff;
+      box-shadow: 0 0 12px rgba(0, 210, 255, 0.6);
+      background: #323240;
+      transform: scale(1.03);
     }
 
     /* Controls Panel */
@@ -285,9 +293,27 @@
 
   <!-- Write-It-Out Words Section -->
   <div class="card">
-    <h2>4. Daily Write-It-Out Words</h2>
-    <p>Ten randomized practice words to spell out phonetically without brief forms:</p>
+    <h2>
+      <span>4. Daily Write-It-Out Words</span>
+      <div class="btn-group">
+        <button class="btn" id="play-writeout-btn" onclick="playWriteOutAudio()">▶ Play Dictation</button>
+        <button class="btn btn-stop" id="stop-writeout-btn" onclick="stopWriteOutAudio()" style="display: none;">■ Stop</button>
+      </div>
+    </h2>
+    <p>Ten randomized practice words to spell out phonetically without brief forms. Click <strong>Play Dictation</strong> for audio dictation:</p>
     
+    <div class="controls-panel">
+      <div class="control-group">
+        <label for="writeout-speed-rate">Speech Speed <span class="range-val" id="writeout-speed-val">1.0x</span></label>
+        <input type="range" id="writeout-speed-rate" min="0.5" max="2.5" step="0.1" value="1.0" oninput="updateWriteOutSpeechControls()">
+      </div>
+
+      <div class="control-group">
+        <label for="writeout-pause-rate">Pause Interval <span class="range-val" id="writeout-pause-val">2.5s</span></label>
+        <input type="range" id="writeout-pause-rate" min="0.5" max="5.0" step="0.5" value="2.5" oninput="updateWriteOutSpeechControls()">
+      </div>
+    </div>
+
     <div class="writeout-grid" id="writeout-container">
       <div class="writeout-item">Loading words...</div>
     </div>
@@ -356,8 +382,6 @@
     const PLAYLIST_ID_1 = "PL85Y9t9lANyCkyIl6hCg1gkbG3pUPyFax";
     const PLAYLIST_ID_2 = "PLQ6pHmhpaNkR9KSKARxLBjo7IcKATzEBY&si";
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQVVfcwBmYpQuWsbAMeHXpZsMxotpmr6DeFVNsn1eByPqKciJ4_zgM-ER00r_M0GrInssVZAxwXNbSC/pub?gid=0&single=true&output=csv";
-    
-    // Paste your published "Write-It-Out" Google Sheet CSV URL here:
     const WRITE_OUT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQVVfcwBmYpQuWsbAMeHXpZsMxotpmr6DeFVNsn1eByPqKciJ4_zgM-ER00r_M0GrInssVZAxwXNbSC/pub?gid=1909470097&single=true&output=csv";
 
     const DAILY_WORD_COUNT = 15;
@@ -368,6 +392,11 @@
     let speechRate = 1.0;
     let pauseIntervalMs = 2500;
 
+    let loadedWriteOutWords = [];
+    let isWriteOutSpeaking = false;
+    let writeOutSpeechRate = 1.0;
+    let writeOutPauseIntervalMs = 2500;
+
     function calculateDayOfYear(today) {
       const startOfYear = Date.UTC(today.getFullYear(), 0, 0);
       const now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
@@ -376,4 +405,375 @@
 
     function updateSpeechControls() {
       speechRate = parseFloat(document.getElementById("speed-rate").value);
-      pauseIntervalMs
+      pauseIntervalMs = parseFloat(document.getElementById("pause-rate").value) * 1000;
+
+      document.getElementById("speed-val").textContent = `${speechRate.toFixed(1)}x`;
+      document.getElementById("pause-val").textContent = `${(pauseIntervalMs / 1000).toFixed(1)}s`;
+    }
+
+    function updateWriteOutSpeechControls() {
+      writeOutSpeechRate = parseFloat(document.getElementById("writeout-speed-rate").value);
+      writeOutPauseIntervalMs = parseFloat(document.getElementById("writeout-pause-rate").value) * 1000;
+
+      document.getElementById("writeout-speed-val").textContent = `${writeOutSpeechRate.toFixed(1)}x`;
+      document.getElementById("writeout-pause-val").textContent = `${(writeOutPauseIntervalMs / 1000).toFixed(1)}s`;
+    }
+
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function generateSingleItem(type) {
+      const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      
+      switch (type) {
+        case "digits":
+          return `${getRandomInt(1, 999)}`;
+        case "large":
+          return `${getRandomInt(1, 999)},${getRandomInt(100, 999).toString().padStart(3, '0')}`;
+        case "currency":
+          return getRandomInt(0, 1) 
+            ? `$${getRandomInt(1, 500)}.${getRandomInt(10, 99)}`
+            : `$${getRandomInt(1, 99)},${getRandomInt(100, 999).toString().padStart(3, '0')}.00`;
+        case "times":
+          return `${getRandomInt(1, 12)}:${getRandomInt(10, 59).toString().padStart(2, '0')} ${getRandomInt(0, 1) ? 'AM' : 'PM'}`;
+        case "dates":
+          return `${months[getRandomInt(0, 11)]} ${getRandomInt(1, 28)}, ${getRandomInt(2015, 2030)}`;
+        case "phone":
+          return `(${getRandomInt(200, 999)}) ${getRandomInt(100, 999)}-${getRandomInt(1000, 9999)}`;
+        case "zip":
+          return `${getRandomInt(10000, 99999)}`;
+        default:
+          return `${getRandomInt(1, 999)}`;
+      }
+    }
+
+    function generateCategoryNumbers() {
+      stopNumberAudio();
+      const category = document.getElementById("category-select").value;
+      const categories = ["digits", "large", "currency", "times", "dates", "phone", "zip"];
+      
+      generatedNumberDrills = [];
+
+      for (let i = 0; i < 20; i++) {
+        let type = category;
+        if (category === "all") {
+          type = categories[Math.floor(Math.random() * categories.length)];
+        }
+        const val = generateSingleItem(type);
+        generatedNumberDrills.push({ type, val });
+      }
+
+      const container = document.getElementById("number-container");
+      container.innerHTML = "";
+
+      generatedNumberDrills.forEach((item, index) => {
+        const div = document.createElement("div");
+        div.className = "number-item";
+        div.id = `num-card-${index}`;
+        div.innerHTML = `<span class="number-num-tag">#${index + 1}</span>${item.val}`;
+        container.appendChild(div);
+      });
+    }
+
+    function playWriteOutAudio() {
+      if (!('speechSynthesis' in window)) {
+        alert("Sorry, your browser doesn't support text-to-speech audio.");
+        return;
+      }
+
+      if (!loadedWriteOutWords || loadedWriteOutWords.length === 0) {
+        alert("No write-it-out words loaded to dictate.");
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      isWriteOutSpeaking = true;
+
+      document.getElementById("play-writeout-btn").style.display = "none";
+      document.getElementById("stop-writeout-btn").style.display = "inline-block";
+
+      let currentIndex = 0;
+
+      function speakNextWord() {
+        if (!isWriteOutSpeaking || currentIndex >= loadedWriteOutWords.length) {
+          stopWriteOutAudio();
+          return;
+        }
+
+        document.querySelectorAll(".writeout-item").forEach(el => el.classList.remove("speaking"));
+        const activeCard = document.getElementById(`writeout-card-${currentIndex}`);
+        if (activeCard) {
+          activeCard.classList.add("speaking");
+          activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        const item = loadedWriteOutWords[currentIndex];
+        const utterance = new SpeechSynthesisUtterance(item.word);
+        utterance.rate = writeOutSpeechRate;
+
+        utterance.onend = function() {
+          currentIndex++;
+          if (isWriteOutSpeaking && currentIndex < loadedWriteOutWords.length) {
+            setTimeout(speakNextWord, writeOutPauseIntervalMs);
+          } else {
+            stopWriteOutAudio();
+          }
+        };
+
+        utterance.onerror = function() {
+          stopWriteOutAudio();
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+
+      speakNextWord();
+    }
+
+    function stopWriteOutAudio() {
+      isWriteOutSpeaking = false;
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      document.querySelectorAll(".writeout-item").forEach(el => el.classList.remove("speaking"));
+      document.getElementById("play-writeout-btn").style.display = "inline-block";
+      document.getElementById("stop-writeout-btn").style.display = "none";
+    }
+
+    function playNumberAudio() {
+      if (!('speechSynthesis' in window)) {
+        alert("Sorry, your browser doesn't support text-to-speech audio.");
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      isSpeaking = true;
+
+      document.getElementById("play-audio-btn").style.display = "none";
+      document.getElementById("stop-audio-btn").style.display = "inline-block";
+
+      let currentIndex = 0;
+
+      function speakNext() {
+        if (!isSpeaking || currentIndex >= generatedNumberDrills.length) {
+          stopNumberAudio();
+          return;
+        }
+
+        document.querySelectorAll(".number-item").forEach(el => el.classList.remove("speaking"));
+        const activeCard = document.getElementById(`num-card-${currentIndex}`);
+        if (activeCard) {
+          activeCard.classList.add("speaking");
+          activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        const item = generatedNumberDrills[currentIndex];
+        let speechText = item.val;
+
+        if (item.type === "phone") {
+          speechText = speechText.replace(/\D/g, ' ');
+        } else if (item.type === "zip") {
+          speechText = speechText.split('').join(' ');
+        }
+
+        const utterance = new SpeechSynthesisUtterance(speechText);
+        utterance.rate = speechRate;
+
+        utterance.onend = function() {
+          currentIndex++;
+          if (isSpeaking && currentIndex < generatedNumberDrills.length) {
+            setTimeout(speakNext, pauseIntervalMs);
+          } else {
+            stopNumberAudio();
+          }
+        };
+
+        utterance.onerror = function() {
+          stopNumberAudio();
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+
+      speakNext();
+    }
+
+    function stopNumberAudio() {
+      isSpeaking = false;
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      document.querySelectorAll(".number-item").forEach(el => el.classList.remove("speaking"));
+      document.getElementById("play-audio-btn").style.display = "inline-block";
+      document.getElementById("stop-audio-btn").style.display = "none";
+    }
+
+    async function fetchPlaylistVideos(playlistId) {
+      if (!API_KEY || API_KEY.includes("YOUR_YOUTUBE") || !playlistId || playlistId.includes("YOUR_SECOND")) return [];
+      const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${API_KEY}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.error) return [];
+        return data.items.map(item => ({
+          videoId: item.snippet.resourceId.videoId,
+          title: item.snippet.title
+        }));
+      } catch (err) {
+        return [];
+      }
+    }
+
+    async function fetchSheetWords(url) {
+      if (!url || url.includes("YOUR_PUBLISHED") || url.includes("YOUR_WRITE_OUT")) return [];
+      try {
+        const response = await fetch(url);
+        const text = await response.text();
+        
+        const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
+        const wordsList = [];
+
+        lines.forEach((line, index) => {
+          if (index === 0 && (line.toLowerCase().includes("word") || line.toLowerCase().includes("outline"))) return;
+
+          const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+          if (parts.length >= 1) {
+            const word = parts[0].replace(/^"|"$/g, '').trim();
+            const stroke = parts[1] ? parts[1].replace(/^"|"$/g, '').trim() : "";
+            if (word) {
+              wordsList.push({ word, stroke });
+            }
+          }
+        });
+
+        return wordsList;
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function getDailySelection(items, dayOfYear, count) {
+      if (items.length <= count) return items;
+
+      const shuffled = [...items];
+      let seed = dayOfYear;
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        seed = (seed * 9301 + 49297) % 233280;
+        const j = Math.floor((seed / 233280) * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      return shuffled.slice(0, count);
+    }
+
+    function copyTableToClipboard() {
+      const rows = document.querySelectorAll("#steno-table-body tr");
+      const textLines = [];
+      
+      rows.forEach(row => {
+        const cells = row.querySelectorAll("td");
+        if (cells.length >= 2) {
+          textLines.push(`${cells[0].textContent}\t${cells[1].textContent}`);
+        }
+      });
+
+      const copyText = textLines.join("\n");
+      navigator.clipboard.writeText(copyText).then(() => {
+        alert("Table copied to clipboard!");
+      });
+    }
+
+    function copyNumbersToClipboard() {
+      const items = document.querySelectorAll("#number-container .number-item");
+      const textLines = [];
+
+      items.forEach(item => {
+        const clone = item.cloneNode(true);
+        const tag = clone.querySelector(".number-num-tag");
+        if (tag) tag.remove();
+        textLines.push(clone.textContent.trim());
+      });
+
+      navigator.clipboard.writeText(textLines.join("\n")).then(() => {
+        alert("20 Number drills copied to clipboard!");
+      });
+    }
+
+    async function init() {
+      const today = new Date();
+      const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      document.getElementById("current-date").textContent = today.toLocaleDateString(undefined, dateOptions);
+
+      const dayOfYear = calculateDayOfYear(today);
+
+      // Render Video #1
+      const videos1 = await fetchPlaylistVideos(PLAYLIST_ID_1);
+      if (videos1.length > 0) {
+        const videoIndex1 = dayOfYear % videos1.length;
+        const dailyVideo1 = videos1[videoIndex1];
+        document.getElementById("youtube-player-1").src = `https://www.youtube.com/embed/${dailyVideo1.videoId}`;
+        document.getElementById("video-title-1").textContent = `1. Dictation #1: ${dailyVideo1.title}`;
+      } else {
+        document.getElementById("video-title-1").textContent = "1. Dictation #1 (Configure API Key & Playlist ID 1)";
+      }
+
+      // Render Video #2
+      const videos2 = await fetchPlaylistVideos(PLAYLIST_ID_2);
+      if (videos2.length > 0) {
+        const videoIndex2 = (dayOfYear + 1) % videos2.length;
+        const dailyVideo2 = videos2[videoIndex2];
+        document.getElementById("youtube-player-2").src = `https://www.youtube.com/embed/${dailyVideo2.videoId}`;
+        document.getElementById("video-title-2").textContent = `2. Dictation #2: ${dailyVideo2.title}`;
+      } else {
+        document.getElementById("video-title-2").textContent = "2. Dictation #2 (Configure Playlist ID 2)";
+      }
+
+      // Render Google Sheet Table (Hesitation Words)
+      const allWords = await fetchSheetWords(CSV_URL);
+      const tbody = document.getElementById("steno-table-body");
+      tbody.innerHTML = "";
+
+      if (allWords.length > 0) {
+        const dailyWords = getDailySelection(allWords, dayOfYear, DAILY_WORD_COUNT);
+        
+        dailyWords.forEach(item => {
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${item.word}</td><td>${item.stroke}</td>`;
+          tbody.appendChild(row);
+        });
+      } else {
+        tbody.innerHTML = `<tr><td colspan="2">No words loaded. Check CSV_URL configuration.</td></tr>`;
+      }
+
+      // Render Write-It-Out Words
+      const allWriteOutWords = await fetchSheetWords(WRITE_OUT_CSV_URL);
+      const writeoutContainer = document.getElementById("writeout-container");
+      writeoutContainer.innerHTML = "";
+
+      if (allWriteOutWords.length > 0) {
+        loadedWriteOutWords = getDailySelection(allWriteOutWords, dayOfYear + 50, WRITE_OUT_COUNT);
+        
+        loadedWriteOutWords.forEach((item, index) => {
+          const div = document.createElement("div");
+          div.className = "writeout-item";
+          div.id = `writeout-card-${index}`;
+          div.textContent = item.word;
+          writeoutContainer.appendChild(div);
+        });
+      } else {
+        writeoutContainer.innerHTML = `<div class="writeout-item" style="grid-column: 1/-1;">Configure WRITE_OUT_CSV_URL in index.html to load words.</div>`;
+      }
+
+      // Generate Initial 20 Number Drills
+      generateCategoryNumbers();
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>
